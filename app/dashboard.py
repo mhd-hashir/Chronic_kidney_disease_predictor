@@ -3,6 +3,10 @@ import requests
 import pandas as pd
 import os
 import io
+import sys
+
+# HACK: Add project root to path so we can import 'src'
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # --------------------------------------------------------------------------------
 # CONFIG & UTILS
@@ -215,62 +219,69 @@ def doctor_view():
     col1, col2 = st.columns([1, 1])
     
     if st.button("Predict Risk", type="primary"):
+        # 1. Prediction Request
         try:
             response = requests.post(f"{API_URL}/predict", json=input_data)
+        except requests.exceptions.ConnectionError:
+            st.error("❌ Could not connect to backend. Is the API server running?")
+            response = None
+            
+        # 2. Process Response
+        if response:
             if response.status_code == 200:
-                result = response.json()
-                with col1:
-                    st.subheader("Results")
-                    risk_level = result["risk_level"]
-                    color = "#ff4b4b" if risk_level == "High" else "#ffa421" if risk_level == "Medium" else "#21c354"
-                    st.markdown(f"""
-                        <div style="padding: 20px; border-radius: 10px; background-color: {color}20; border: 2px solid {color}; text-align: center;">
-                            <h2 style="color: {color}; margin:0;">{risk_level} Risk</h2>
-                            <p style="font-size: 1.2em; margin:0;">Probability: {result['probability']:.1%}</p>
-                        </div>
-                    """, unsafe_allow_html=True)
+                try:
+                    result = response.json()
+                    with col1:
+                        st.subheader("Results")
+                        risk_level = result["risk_level"]
+                        color = "#ff4b4b" if risk_level == "High" else "#ffa421" if risk_level == "Medium" else "#21c354"
+                        st.markdown(f"""
+                            <div style="padding: 20px; border-radius: 10px; background-color: {color}20; border: 2px solid {color}; text-align: center;">
+                                <h2 style="color: {color}; margin:0;">{risk_level} Risk</h2>
+                                <p style="font-size: 1.2em; margin:0;">Probability: {result['probability']:.1%}</p>
+                            </div>
+                        """, unsafe_allow_html=True)
 
-                with col2:
-                    st.subheader("🔍 Detailed AI Explanation")
-                    if 'explanation' in result:
-                        # Convert to DataFrame for chart
-                        exp_data = result['explanation']
-                        # Sort by absolute importance
-                        sorted_features = sorted(exp_data.items(), key=lambda x: abs(x[1]), reverse=True)
-                        # Take top 10
-                        top_features = dict(sorted_features[:10])
-                        
-                        st.write("Top factors driving this prediction:")
-                        # Using a simple bar chart
-                        st.bar_chart(top_features)
+                    with col2:
+                        st.subheader("🔍 Detailed AI Explanation")
+                        if 'explanation' in result and result['explanation']:
+                            # Convert to DataFrame for chart
+                            exp_data = result['explanation']
+                            # Sort by absolute importance
+                            sorted_features = sorted(exp_data.items(), key=lambda x: abs(x[1]), reverse=True)
+                            # Take top 10
+                            top_features = dict(sorted_features[:10])
+                            
+                            st.write("Top factors driving this prediction:")
+                            # Using a simple bar chart
+                            st.bar_chart(top_features)
+                        else:
+                            st.info("No detailed explanation available.")
+                    
+                    # [NEW] Sensitivity Warnings
+                    if "warnings" in result and result["warnings"]:
+                        st.error("⚠️ CRITICAL MISSING DATA DETECTED")
+                        for w in result["warnings"]:
+                            st.write(w)
+                        st.info("The AI simulated scenarios for these missing values and found they could change the diagnosis. It is recommended to test for these.")
                     else:
-                        st.info("No detailed explanation available.")
-                
-                # [NEW] Sensitivity Warnings
-                if "warnings" in result and result["warnings"]:
-                    st.error("⚠️ CRITICAL MISSING DATA DETECTED")
-                    for w in result["warnings"]:
-                        st.write(w)
-                    st.info("The AI simulated scenarios for these missing values and found they could change the diagnosis. It is recommended to test for these.")
-                elif unknowns:
-                    st.success("✅ Sensitivity Check Passed: Missing values did not affect the clinical outcome.")
-                
-                st.write("---")
-                st.write("Does this diagnosis align with your clinical assessment?")
-                c1, c2, c3 = st.columns([1,1,3])
-                if c1.button("✅ Yes"):
-                    st.balloons()
-                    st.success("Case logged as Correct Diagnosis.")
-                if c2.button("❌ No"):
-                    # Send feedback
-                    input_data['correct_diagnosis'] = 'notckd' if result['prediction'] == 'ckd' else 'ckd'
-                    requests.post(f"{API_URL}/feedback", json=input_data)
-                    st.warning("Feedback Sent. This case has been flagged for model retraining.")
-
+                        st.success("✅ Sensitivity Check Passed: Missing values did not affect the clinical outcome.")
+                    
+                    st.write("---")
+                    st.write("Does this diagnosis align with your clinical assessment?")
+                    c1, c2, c3 = st.columns([1,1,3])
+                    if c1.button("✅ Yes"):
+                        st.balloons()
+                        st.success("Case logged as Correct Diagnosis.")
+                    if c2.button("❌ No"):
+                        # Send feedback
+                        input_data['correct_diagnosis'] = 'notckd' if result['prediction'] == 'ckd' else 'ckd'
+                        requests.post(f"{API_URL}/feedback", json=input_data)
+                        st.warning("Feedback Sent. This case has been flagged for model retraining.")
+                except Exception as e:
+                    st.error(f"⚠️ An error occurred while rendering results: {e}")
             else:
-                st.error("API Error")
-        except:
-            st.error("Could not connect to backend.")
+                st.error(f"API Error: {response.status_code} - {response.text}")
 
 
 def developer_view():

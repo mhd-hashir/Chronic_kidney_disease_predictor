@@ -101,19 +101,83 @@ class CKDExplainer:
                 return {}
 
             # Map to feature names
+            feats = []
+            
+            # Attempt 1: Standard Sklearn API
             if hasattr(self.preprocessor, 'get_feature_names_out'):
                 try:
-                    feats = self.preprocessor.get_feature_names_out()
-                except:
+                    feats = list(self.preprocessor.get_feature_names_out())
+                except Exception:
+                    # Pipeline failed (likely due to custom step missing method)
+                    # Attempt 2: Dig into pipeline for 'preprocessor' step (ColumnTransformer)
+                    try:
+                        if hasattr(self.preprocessor, 'named_steps') and 'preprocessor' in self.preprocessor.named_steps:
+                            feats = list(self.preprocessor.named_steps['preprocessor'].get_feature_names_out())
+                    except:
+                        pass
+            
+            # Fallback 1: Use original column names if standard scalar (no column change)
+            if not feats and hasattr(self, 'feature_names'):
+                 feats = self.feature_names
+            
+            # Fallback 2: Generic
+            if not feats or len(feats) != len(vals):
+                # If lengths mismatch, we can't use the names. Fallback to generic.
+                # But if we have original names and they match len (e.g. no encoding was done), use them.
+                if hasattr(self, 'feature_names') and len(self.feature_names) == len(vals):
+                     feats = self.feature_names
+                else:
                      feats = [f"Feature {i}" for i in range(len(vals))]
-            else:
-                feats = self.feature_names if hasattr(self, 'feature_names') else [f"Feature {i}" for i in range(len(vals))]
+            
+            # Clean up feature names (remove prefixes from ColumnTransformer)
+            # The prefixes are usually 'num__' or 'cat__' based on the transformer name
+            cleaned_feats = []
+            for f in feats:
+                # Remove common prefixes
+                f_clean = f.replace('num__', '').replace('cat__', '').replace('remainder__', '').replace('numerical__', '').replace('categorical__', '')
                 
-            # Ensure lengths match
-            if len(feats) != len(vals):
-                 return {f"Feat_{i}": v for i, v in enumerate(vals)}
-                 
-            return dict(zip(feats, vals))
+                # Setup readable names mapping
+                name_map = {
+                    "age": "Age",
+                    "bp": "Blood Pressure",
+                    "sg": "Specific Gravity",
+                    "al": "Albumin",
+                    "su": "Sugar",
+                    "rbc": "Red Blood Cells",
+                    "pc": "Pus Cell",
+                    "pcc": "Pus Cell Clumps",
+                    "ba": "Bacteria",
+                    "bgr": "Blood Glucose Random",
+                    "bu": "Blood Urea",
+                    "sc": "Serum Creatinine",
+                    "sod": "Sodium",
+                    "pot": "Potassium",
+                    "hemo": "Hemoglobin",
+                    "pcv": "Packed Cell Volume",
+                    "wc": "White Blood Cell Count",
+                    "rc": "Red Blood Cell Count",
+                    "htn": "Hypertension",
+                    "dm": "Diabetes Mellitus",
+                    "cad": "Coronary Artery Disease",
+                    "appet": "Appetite",
+                    "pe": "Pedal Edema",
+                    "ane": "Anemia"
+                }
+                
+                # Handle OneHotEncoded names like "htn_yes" -> "Hypertension (yes)"
+                for key, val in name_map.items():
+                    if f_clean == key:
+                        f_clean = val
+                        break
+                    elif f_clean.startswith(key + "_"):
+                        # Convert "htn_yes" -> "Hypertension: yes"
+                        suffix = f_clean[len(key)+1:] # get "yes"
+                        f_clean = f"{val}: {suffix}"
+                        break
+                
+                cleaned_feats.append(f_clean)
+
+            return dict(zip(cleaned_feats, vals))
             
         except Exception as e:
             print(f"Explanation Error: {e}")

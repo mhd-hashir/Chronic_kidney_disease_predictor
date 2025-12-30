@@ -14,7 +14,7 @@ timeout /t 5 /nobreak >nul
 echo.
 echo [2/2] Starting Doctor Portal (Streamlit) on Port 8501...
 :: Opens a new window titled "CKD_Doctor_Portal" and runs streamlit
-start "CKD_Doctor_Portal" cmd /k "streamlit run app/dashboard.py"
+start "Doctor Portal" python -m streamlit run app/dashboard.py"
 
 echo.
 echo ==============================================
