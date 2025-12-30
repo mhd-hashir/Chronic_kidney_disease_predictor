@@ -65,6 +65,13 @@ def load_artifacts():
     model = joblib.load(MODEL_PATH)
     preprocessor = joblib.load(PREPROCESSOR_PATH)
     
+    # Initialize Explainer
+    global explainer
+    # We ideally need training data to initialize explainer, 
+    # checking if we can load it from a pickle or if CKDExplainer handles it.
+    # For now, instantiating CKDExplainer.
+    explainer = CKDExplainer(model, preprocessor)
+    
     # Load Stats
     STATS_PATH = "models/data_stats.json"
     if os.path.exists(STATS_PATH):
@@ -143,7 +150,9 @@ def predict_risk(data: PatientData):
         "probability": float(prob),
         "risk_level": "High" if prob > 0.7 else "Medium" if prob > 0.3 else "Low",
         "warnings": warnings,
-        "missing_cols": missing_cols
+        "missing_cols": missing_cols,
+        # [NEW] detailed explanation
+        "explanation": explainer.explain_local(df) # Returns dict of feature->importance
     }
 
 @app.post("/feedback")

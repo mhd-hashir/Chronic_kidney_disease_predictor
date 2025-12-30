@@ -60,6 +60,15 @@ def doctor_view():
             if extracted:
                 st.sidebar.success("✅ Data Extracted!")
                 pre_filled_data = extracted
+                
+                # [NEW] Document Preview
+                import base64
+                st.markdown("### 📄 Document Preview")
+                base64_pdf = base64.b64encode(uploaded_report.getvalue()).decode('utf-8')
+                pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="500" type="application/pdf"></iframe>'
+                st.markdown(pdf_display, unsafe_allow_html=True)
+                st.info("👈 Compare extracted values in sidebar with this document.")
+                
             else:
                 st.sidebar.warning("Could not extract data. Please enter manually.")
 
@@ -73,7 +82,8 @@ def doctor_view():
             
             # 1. "Include" Checkbox (Left)
             # Default to Checked (Known) unless specifically set otherwise
-            is_included = c1.checkbox("", value=True, key=f"inc_{key}", help=f"Check to include {label}")
+            # [Refactor] Removed 'help' tooltip per request - cleaner UI
+            is_included = c1.checkbox("", value=True, key=f"inc_{key}")
             
             # 2. Input Field (Right)
             # We get the default value from parsed report or passed default
@@ -221,8 +231,20 @@ def doctor_view():
                     """, unsafe_allow_html=True)
 
                 with col2:
-                    st.subheader("AI Explanation")
-                    st.info("Why? Factors contributing to this score (SHAP Plot placeholder)")
+                    st.subheader("🔍 Detailed AI Explanation")
+                    if 'explanation' in result:
+                        # Convert to DataFrame for chart
+                        exp_data = result['explanation']
+                        # Sort by absolute importance
+                        sorted_features = sorted(exp_data.items(), key=lambda x: abs(x[1]), reverse=True)
+                        # Take top 10
+                        top_features = dict(sorted_features[:10])
+                        
+                        st.write("Top factors driving this prediction:")
+                        # Using a simple bar chart
+                        st.bar_chart(top_features)
+                    else:
+                        st.info("No detailed explanation available.")
                 
                 # [NEW] Sensitivity Warnings
                 if "warnings" in result and result["warnings"]:
