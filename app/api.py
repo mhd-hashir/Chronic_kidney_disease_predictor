@@ -9,6 +9,16 @@ from src.explainability import CKDExplainer
 
 app = FastAPI(title="CKD Prediction & Explainability API")
 
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # Allow all for local dev convenience
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Load Model & Preprocessor
 MODEL_PATH = "models/ckd_model.pkl"
 PREPROCESSOR_PATH = "models/preprocessor.pkl"
